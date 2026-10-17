@@ -1,6 +1,6 @@
 import fs from "node:fs"
 
-import { Marketplace, ScrapedProductPreview } from "@afilimax/core"
+import { Marketplace, ScrapedProduct, ScrapedProductPreview } from "@afilimax/core"
 import { Impit } from "impit"
 import puppeteer from "puppeteer-extra"
 import StealthPlugin from "puppeteer-extra-plugin-stealth"
@@ -16,6 +16,10 @@ export type AliExpressSearchProductsOptions = {
     query: string
     limit?: number
     page?: number
+}
+
+export type AliExpressGetProductOptions = {
+    url: string
 }
 
 export class AliExpressScraper {
@@ -264,6 +268,248 @@ export class AliExpressScraper {
         } catch (browserError: any) {
             this.log(`Falha também no fallback do navegador: ${browserError.message}`)
             return []
+        }
+    }
+
+    async getProduct({ url }: AliExpressGetProductOptions): Promise<ScrapedProduct> {
+        this.log(`Obtendo produto do AliExpress: ${url}`)
+        let html = ""
+
+        try {
+            const response = await this.httpClient.fetch(url)
+            if (response.status === 200) {
+                html = await response.text()
+                this.log(`HTML obtido via Impit (${html.length} bytes)`)
+            }
+        } catch (error: any) {
+            this.log(`Fetch HTTP falhou: ${error.message}. Tentando navegador...`)
+        }
+
+        const isBlocked = !html || html.length < 5000 || html.includes("login.aliexpress.com") || html.includes("sec.aliexpress.com")
+
+        if (isBlocked) {
+            this.log("Acionando fallback do Puppeteer Stealth para carregar produto...")
+            html = await this.fetchProductPageViaBrowser(url)
+        }
+
+        return this.parseProductPage(html, url)
+    }
+
+    private async fetchProductPageViaBrowser(url: string): Promise<string> {
+        const browser = await this.getBrowser()
+        const page = await browser.newPage()
+
+        try {
+            await page.setViewport({ width: 1920, height: 1080 })
+            await page.setUserAgent(
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36",
+            )
+            await page.setExtraHTTPHeaders({
+                "accept-language": "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7",
+            })
+
+            await page.goto(url, { waitUntil: "networkidle2", timeout: this.timeout })
+            await new Promise((r) => setTimeout(r, 2000))
+
+            return await page.content()
+        } finally {
+            await page.close()
+        }
+    }
+
+    private parseProductPage(html: string, url: string): ScrapedProduct {
+        const scrapedAt = new Date().toISOString()
+
+        const idMatch = url.match(/\/item\/(\d+)\.html/i)
+        const externalId = idMatch ? idMatch[1] : null
+
+        // 1. Tentar parsear runParams ou _init_data_
+        let runParamsData: any = null
+        const runParamsMatch = html.match(/window\.runParams\s*=\s*(\{[\s\S]*?\});\s*(?:var|window|console|<\/script)/i)
+        if (runParamsMatch) {
+            try {
+                const evalFn = new Function(`return ${runParamsMatch[1]}`)
+                runParamsData = evalFn()?.data
+            } catch {
+                // continua
+            }
+        }
+
+        // 2. Tentar JSON-LD
+        let jsonLdProduct: any = null
+        const jsonLdMatches = [...html.matchAll(/<script[^>]+type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/gi)]
+        for (const match of jsonLdMatches) {
+            try {
+                const parsed = JSON.parse(match[1])
+                if (parsed["@type"] === "Product") {
+                    jsonLdProduct = parsed
+                    break
+                }
+            } catch {
+                continue
+            }
+        }
+
+        // Title
+        let title =
+            runParamsData?.pageModule?.title ??
+            runParamsData?.titleModule?.subject ??
+            jsonLdProduct?.name ??
+            null
+
+        if (!title) {
+            const ogTitleMatch = html.match(/<meta[^>]+property="og:title"[^>]+content="([^"]*)"/i)
+            if (ogTitleMatch) title = ogTitleMatch[1]
+        }
+        if (!title) {
+            const titleTagMatch = html.match(/<title>([^<]*)<\/title>/i)
+            if (titleTagMatch) title = titleTagMatch[1]
+        }
+
+        // Description
+        let description =
+            runParamsData?.descriptionModule?.description ??
+            jsonLdProduct?.description ??
+            null
+        if (!description) {
+            const ogDescMatch = html.match(/<meta[^>]+property="og:description"[^>]+content="([^"]*)"/i)
+            if (ogDescMatch) description = ogDescMatch[1]
+        }
+
+        // Brand / Store
+        let brand =
+            runParamsData?.storeModule?.storeName ??
+            runParamsData?.sellerModule?.storeName ??
+            jsonLdProduct?.brand?.name ??
+            null
+        if (!brand) {
+            const ogSiteMatch = html.match(/<meta[^>]+property="og:site_name"[^>]+content="([^"]*)"/i)
+            if (ogSiteMatch) brand = ogSiteMatch[1]
+        }
+
+        // Price
+        let priceValue: number | null = null
+        let originalPriceValue: number | null = null
+
+        const actPriceRaw =
+            runParamsData?.priceModule?.formatedActivityPrice ??
+            runParamsData?.priceModule?.minActivityAmount?.value ??
+            runParamsData?.priceModule?.formatedAmount ??
+            runParamsData?.priceModule?.minAmount?.value ??
+            jsonLdProduct?.offers?.price ??
+            jsonLdProduct?.offers?.lowPrice
+
+        priceValue = this.parsePrice(actPriceRaw)
+
+        const origPriceRaw =
+            runParamsData?.priceModule?.formatedPrice ??
+            runParamsData?.priceModule?.maxAmount?.value
+
+        originalPriceValue = this.parsePrice(origPriceRaw)
+        if (originalPriceValue !== null && priceValue !== null && originalPriceValue <= priceValue) {
+            originalPriceValue = null
+        }
+
+        // Fallback regex para preço no HTML se ainda null
+        if (priceValue == null) {
+            const actMatch = html.match(/"formatedActivityPrice":"R\$\s*([\d,.]+)"/i)
+            if (actMatch) priceValue = this.parsePrice(actMatch[1])
+        }
+        if (priceValue == null) {
+            const formatedMatch = html.match(/"formatedAmount":"R\$\s*([\d,.]+)"/i)
+            if (formatedMatch) priceValue = this.parsePrice(formatedMatch[1])
+        }
+
+        // Rating
+        let ratingAverage = 0
+        let totalReviews: number | null = null
+
+        const avgStar =
+            runParamsData?.titleModule?.feedbackRating?.averageStar ??
+            runParamsData?.feedbackModule?.averageStar ??
+            jsonLdProduct?.aggregateRating?.ratingValue
+        if (avgStar != null) {
+            ratingAverage = this.parsePrice(avgStar) ?? 0
+        } else {
+            const starMatch = html.match(/"averageStar":([\d.]+)/i)
+            if (starMatch) ratingAverage = parseFloat(starMatch[1])
+        }
+
+        const validNum =
+            runParamsData?.titleModule?.feedbackRating?.totalValidNum ??
+            runParamsData?.feedbackModule?.totalValidNum ??
+            jsonLdProduct?.aggregateRating?.reviewCount ??
+            jsonLdProduct?.aggregateRating?.ratingCount
+        if (validNum != null) {
+            totalReviews = parseInt(String(validNum), 10)
+        } else {
+            const numMatch = html.match(/"totalValidNum":(\d+)/i)
+            if (numMatch) totalReviews = parseInt(numMatch[1], 10)
+        }
+
+        // Images
+        const images: string[] = []
+        const rawImages =
+            runParamsData?.imageModule?.imagePathList ??
+            (Array.isArray(jsonLdProduct?.image) ? jsonLdProduct.image : jsonLdProduct?.image ? [jsonLdProduct.image] : [])
+
+        for (const img of rawImages) {
+            const formatted = this.formatThumbnail(img)
+            if (formatted && !images.includes(formatted)) {
+                images.push(formatted)
+            }
+        }
+
+        if (images.length === 0) {
+            const ogImgMatch = html.match(/<meta[^>]+property="og:image"[^>]+content="([^"]*)"/i)
+            if (ogImgMatch) {
+                const formatted = this.formatThumbnail(ogImgMatch[1])
+                if (formatted) images.push(formatted)
+            }
+        }
+
+        // Shipping
+        const freeShipping = /frete grátis|free shipping/i.test(html)
+
+        // Availability
+        const inStock = !html.includes('"quantity":0') && !/produto esgotado|out of stock/i.test(html)
+
+        return {
+            marketplace: Marketplace.AliExpress,
+            externalId,
+            title: title ? title.trim() : "Produto AliExpress",
+            description: description ? description.trim() : null,
+            brand: brand ? brand.trim() : null,
+            price: {
+                value: priceValue ?? 0,
+                originalValue: originalPriceValue,
+                currency: "BRL",
+                pixPrice: null,
+                installment: null,
+            },
+            shipping: {
+                price: freeShipping ? 0 : null,
+                currency: "BRL",
+                freeShipping,
+                full: null,
+                prime: null,
+                estimatedTime: null,
+            },
+            rating: {
+                average: ratingAverage,
+                totalReviews,
+            },
+            availability: {
+                inStock,
+                quantity: null,
+            },
+            images,
+            thumbnails: images.length > 0 ? images : null,
+            categories: null,
+            features: null,
+            specifications: null,
+            coupons: null,
+            scrapedAt,
         }
     }
 
