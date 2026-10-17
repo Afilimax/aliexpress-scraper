@@ -5,8 +5,8 @@
 
 O `@afilimax/aliexpress-scraper` é uma biblioteca TypeScript de alta performance e resiliência para busca e extração estruturada de dados de produtos do **AliExpress**, integrada ao ecossistema **Afilimax** e focada no catálogo e moeda do **Brasil (BRL)**.
 
-Construída sobre os padrões de web scraping do **Xcrap**, a biblioteca opera com estratégia em camadas:
-1. **Camada Primária (HTTP Ultrarrápida)**: Consome a listagem brasileira (`pt.aliexpress.com`) com emulação de cabeçalhos de browser e cookies de localização (`BRL` / `BR`) via `@xcrap/got-scraping-client`, extraindo dados nativos do bloco `_init_data_`.
+Construída com foco em resiliência e velocidade, a biblioteca opera com estratégia em camadas:
+1. **Camada Primária (HTTP Ultrarrápida com Impit)**: Consome a listagem brasileira (`pt.aliexpress.com`) com emulação de browser Chrome e cookies de localização (`BRL` / `BR`) via [`impit`](https://www.npmjs.com/package/impit), extraindo dados nativos do bloco estruturado `_init_data_`.
 2. **Camada de Fallback (Puppeteer Stealth)**: Caso ocorra bloqueio ou desafio anti-bot, a biblioteca aciona automaticamente o navegador automatizado com `puppeteer-extra-plugin-stealth` para renderizar a página.
 
 ---

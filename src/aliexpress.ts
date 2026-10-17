@@ -1,7 +1,7 @@
 import fs from "node:fs"
 
 import { Marketplace, ScrapedProductPreview } from "@afilimax/core"
-import { GotScrapingClient } from "@xcrap/got-scraping-client"
+import { Impit } from "impit"
 import puppeteer from "puppeteer-extra"
 import StealthPlugin from "puppeteer-extra-plugin-stealth"
 
@@ -21,17 +21,16 @@ export type AliExpressSearchProductsOptions = {
 export class AliExpressScraper {
     private readonly timeout: number
     private readonly quiet: boolean
-    private httpClient: GotScrapingClient
+    private httpClient: Impit
     private browser: any = null
 
     constructor(options: AliExpressScraperOptions = {}) {
         this.timeout = options.timeout ?? 30000
         this.quiet = options.quiet ?? true
 
-        this.httpClient = new GotScrapingClient({
-            timeout: {
-                request: this.timeout,
-            },
+        this.httpClient = new Impit({
+            browser: "chrome",
+            timeout: this.timeout,
             headers: {
                 "accept-language": "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7",
                 cookie: "aep_usuc_f=site=bra&c_tp=BRL&region=BR&b_locale=pt_BR;",
@@ -242,17 +241,20 @@ export class AliExpressScraper {
         this.log(`Buscando produtos em: ${url}`)
 
         try {
-            // Estratégia 1: Leve e rápida via GotScrapingClient
-            const response = await this.httpClient.fetch({ url })
-            if (response.status === 200 && response.body) {
-                const results = this.extractFromHtml(response.body, limit, scrapedAt)
-                if (results.length > 0) {
-                    this.log(`Estratégia HTTP obteve ${results.length} produtos`)
-                    return results
+            // Estratégia 1: Leve e ultrarrápida via Impit (emulação Chrome)
+            const response = await this.httpClient.fetch(url)
+            if (response.status === 200) {
+                const html = await response.text()
+                if (html) {
+                    const results = this.extractFromHtml(html, limit, scrapedAt)
+                    if (results.length > 0) {
+                        this.log(`Estratégia HTTP (Impit) obteve ${results.length} produtos`)
+                        return results
+                    }
                 }
             }
         } catch (error: any) {
-            this.log(`Estratégia HTTP falhou (${error.message}). Tentando fallback via Browser...`)
+            this.log(`Estratégia HTTP (Impit) falhou (${error.message}). Tentando fallback via Browser...`)
         }
 
         // Estratégia 2: Fallback via Puppeteer Stealth

@@ -56,10 +56,8 @@
     "vitest": "^4.1.0"
   },
   "dependencies": {
-    "@xcrap/core": "^0.2.3",
-    "@xcrap/extractor": "^0.3.2",
-    "@xcrap/got-scraping-client": "^0.1.1",
-    "@xcrap/transformer": "^0.3.7",
+    "impit": "^0.14.6",
+    "puppeteer-core": "^25.14.0",
     "puppeteer-extra": "^3.3.6",
     "puppeteer-extra-plugin-stealth": "^2.11.2"
   },

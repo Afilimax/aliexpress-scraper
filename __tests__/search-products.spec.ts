@@ -70,10 +70,10 @@ describe("AliExpressScraper – searchProducts", () => {
     })
 
     it("deve extrair e retornar ScrapedProductPreview[] a partir do bloco init_data", async () => {
-        // Mock do httpClient para simular retorno HTML do AliExpress
+        // Mock do httpClient (Impit) para simular retorno HTML do AliExpress
         vi.spyOn((scraper as any).httpClient, "fetch").mockResolvedValue({
             status: 200,
-            body: sampleHtmlWithInitData,
+            text: () => Promise.resolve(sampleHtmlWithInitData),
         })
 
         const results = await scraper.searchProducts({ query: "fone bluetooth", limit: 5 })
@@ -101,14 +101,12 @@ describe("AliExpressScraper – searchProducts", () => {
     it("deve construir a URL brasileira correta com paginação", async () => {
         const fetchSpy = vi.spyOn((scraper as any).httpClient, "fetch").mockResolvedValue({
             status: 200,
-            body: sampleHtmlWithInitData,
+            text: () => Promise.resolve(sampleHtmlWithInitData),
         })
 
         await scraper.searchProducts({ query: "smart watch", page: 2 })
 
-        expect(fetchSpy).toHaveBeenCalledWith({
-            url: "https://pt.aliexpress.com/w/wholesale-smart-watch.html?page=2",
-        })
+        expect(fetchSpy).toHaveBeenCalledWith("https://pt.aliexpress.com/w/wholesale-smart-watch.html?page=2")
     })
 
     it("deve acionar o fallback do navegador caso a requisição HTTP falhe", async () => {
