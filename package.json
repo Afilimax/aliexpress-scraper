@@ -62,6 +62,6 @@
     "puppeteer-extra-plugin-stealth": "^2.11.2"
   },
   "peerDependencies": {
-    "@afilimax/core": "file:../core"
+    "@afilimax/core": "^0.5.0"
   }
 }
