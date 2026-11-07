@@ -285,7 +285,8 @@ export class AliExpressScraper {
             this.log(`Fetch HTTP falhou: ${error.message}. Tentando navegador...`)
         }
 
-        const isBlocked = !html || html.length < 5000 || html.includes("login.aliexpress.com") || html.includes("sec.aliexpress.com")
+        const isBlocked =
+            !html || html.length < 5000 || html.includes("login.aliexpress.com") || html.includes("sec.aliexpress.com")
 
         if (isBlocked) {
             this.log("Acionando fallback do Puppeteer Stealth para carregar produto...")
@@ -352,10 +353,7 @@ export class AliExpressScraper {
 
         // Title
         let title =
-            runParamsData?.pageModule?.title ??
-            runParamsData?.titleModule?.subject ??
-            jsonLdProduct?.name ??
-            null
+            runParamsData?.pageModule?.title ?? runParamsData?.titleModule?.subject ?? jsonLdProduct?.name ?? null
 
         if (!title) {
             const ogTitleMatch = html.match(/<meta[^>]+property="og:title"[^>]+content="([^"]*)"/i)
@@ -367,10 +365,7 @@ export class AliExpressScraper {
         }
 
         // Description
-        let description =
-            runParamsData?.descriptionModule?.description ??
-            jsonLdProduct?.description ??
-            null
+        let description = runParamsData?.descriptionModule?.description ?? jsonLdProduct?.description ?? null
         if (!description) {
             const ogDescMatch = html.match(/<meta[^>]+property="og:description"[^>]+content="([^"]*)"/i)
             if (ogDescMatch) description = ogDescMatch[1]
@@ -401,9 +396,7 @@ export class AliExpressScraper {
 
         priceValue = this.parsePrice(actPriceRaw)
 
-        const origPriceRaw =
-            runParamsData?.priceModule?.formatedPrice ??
-            runParamsData?.priceModule?.maxAmount?.value
+        const origPriceRaw = runParamsData?.priceModule?.formatedPrice ?? runParamsData?.priceModule?.maxAmount?.value
 
         originalPriceValue = this.parsePrice(origPriceRaw)
         if (originalPriceValue !== null && priceValue !== null && originalPriceValue <= priceValue) {
@@ -451,7 +444,11 @@ export class AliExpressScraper {
         const images: string[] = []
         const rawImages =
             runParamsData?.imageModule?.imagePathList ??
-            (Array.isArray(jsonLdProduct?.image) ? jsonLdProduct.image : jsonLdProduct?.image ? [jsonLdProduct.image] : [])
+            (Array.isArray(jsonLdProduct?.image)
+                ? jsonLdProduct.image
+                : jsonLdProduct?.image
+                  ? [jsonLdProduct.image]
+                  : [])
 
         for (const img of rawImages) {
             const formatted = this.formatThumbnail(img)
