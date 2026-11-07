@@ -24,7 +24,8 @@
     "format": "prettier --write \"src/**/*.ts\"",
     "lint": "eslint \"src/**/*.ts\" --fix",
     "test": "vitest run",
-    "test:cov": "vitest run --coverage"
+    "test:cov": "vitest run --coverage",
+    "test:watch": "vitest"
   },
   "publishConfig": {
     "access": "public"
@@ -43,9 +44,7 @@
   "devDependencies": {
     "@ianvs/prettier-plugin-sort-imports": "^4.7.1",
     "@types/node": "^25.5.0",
-    "@typescript-eslint/eslint-plugin": "^8.24.0",
-    "@typescript-eslint/parser": "^8.24.0",
-    "@vitest/coverage-v8": "^4.1.0",
+    "@vitest/coverage-v8": "^5.1.0",
     "eslint": "^10.0.3",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-prettier": "^5.5.5",
@@ -53,7 +52,8 @@
     "prettier": "^3.8.1",
     "tsx": "^4.23.15",
     "typescript": "^5.9.3",
-    "vitest": "^4.1.0"
+    "typescript-eslint": "^8.72.1",
+    "vitest": "^5.1.0"
   },
   "dependencies": {
     "impit": "^0.14.6",
