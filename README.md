@@ -148,6 +148,7 @@ Encerra instâncias do navegador subjacente se tiverem sido abertas pelo fallbac
 ## 📄 Licença
 
 Distribuído sob a licença **MIT**. Desenvolvido com ❤️ pelo ecossistema **Afilimax**.
+
 ---
 
 ## Automatize sua operação de afiliados
