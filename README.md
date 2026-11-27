@@ -7,147 +7,168 @@
 
 # @afilimax/aliexpress-scraper
 
-O `@afilimax/aliexpress-scraper` é uma biblioteca TypeScript de alta performance e resiliência para busca e extração estruturada de dados de produtos do **AliExpress**, integrada ao ecossistema **Afilimax** e focada no catálogo e moeda do **Brasil (BRL)**.
+Biblioteca TypeScript para pesquisar produtos e extrair páginas do AliExpress Brasil. O pacote usa requisições HTTP com Impit como caminho principal e Puppeteer com modo stealth como alternativa quando a página exige renderização ou apresenta bloqueios.
 
-Construída com foco em resiliência e velocidade, a biblioteca opera com estratégia em camadas:
-1. **Camada Primária (HTTP Ultrarrápida com Impit)**: Consome a listagem brasileira (`pt.aliexpress.com`) com emulação de browser Chrome e cookies de localização (`BRL` / `BR`) via [`impit`](https://www.npmjs.com/package/impit), extraindo dados nativos do bloco estruturado `_init_data_`.
-2. **Camada de Fallback (Puppeteer Stealth)**: Caso ocorra bloqueio ou desafio anti-bot, a biblioteca aciona automaticamente o navegador automatizado com `puppeteer-extra-plugin-stealth` para renderizar a página.
+## Recursos
 
----
+- Busca paginada no catálogo em português do AliExpress.
+- Extração de detalhes de um produto a partir da URL.
+- Requisições HTTP com emulação de Chrome e localização brasileira.
+- Fallback automático para navegador com Puppeteer Stealth.
+- Leitura de dados de `_init_data_`, `runParams`, JSON-LD e metadados HTML.
+- Preços normalizados em BRL e resultados tipados pelo `@afilimax/core`.
+- Encerramento explícito do navegador usado pelo fallback.
 
-## ✨ Principais Características
-
-- **⚡ Alta Performance**: Extração ultrarrápida (geralmente < 1s) sem overhead de navegador para a maioria das consultas.
-- **🛡️ Fallback Anti-Bot com Stealth**: Equipado com Puppeteer Stealth para contornar verificações dinâmicas quando necessário.
-- **🇧🇷 Focado no Brasil (BRL)**: Configurado nativamente para catálogo em português (`pt.aliexpress.com`) e conversão de preços em Reais (`BRL`).
-- **🔍 Retorno Padronizado**: Resultados entregues na interface universal `ScrapedProductPreview` do `@afilimax/core`.
-- **📦 100% TypeScript**: Tipagem estrita com autocompletar e validação de contratos.
-
----
-
-## 🚀 Instalação
+## Instalação
 
 ```bash
-npm install @afilimax/aliexpress-scraper
+npm install @afilimax/aliexpress-scraper @afilimax/core
 ```
 
-> [!IMPORTANT]
-> Este pacote utiliza o `@afilimax/core` como dependência de par (*peer dependency*). Certifique-se de tê-lo instalado no seu projeto:
-> ```bash
-> npm install @afilimax/core
-> ```
+O `@afilimax/core` é uma dependência de par obrigatória, na versão `^0.5.0`.
 
----
+## Como usar
 
-## 🛠️ Como Usar
-
-### Exemplo Básico de Busca de Produtos
+### Pesquisar produtos
 
 ```typescript
 import { AliExpressScraper } from "@afilimax/aliexpress-scraper"
 
-async function run() {
-    const scraper = new AliExpressScraper({
-        quiet: false // Exibe logs do processo de scraping
-    })
+async function main() {
+    const scraper = new AliExpressScraper({ quiet: false })
 
     try {
-        console.log("Pesquisando produtos no AliExpress...")
-
         const products = await scraper.searchProducts({
-            query: "fone bluetooth gamer",
-            limit: 5
+            query: "wireless gaming headset",
+            limit: 5,
+            page: 1,
         })
 
-        console.log(`Encontrados ${products.length} produtos:`)
+        console.log("Products found:", products.length)
         console.log(JSON.stringify(products, null, 2))
     } catch (error) {
-        console.error("Erro na busca:", error)
+        console.error("Search failed:", error)
     } finally {
-        // Encerra instâncias abertas do navegador
         await scraper.close()
     }
 }
 
-run()
+main()
 ```
 
-### Paginação
+### Extrair um produto
 
 ```typescript
-const page2Products = await scraper.searchProducts({
-    query: "smart watch",
-    limit: 10,
-    page: 2 // Página 2 dos resultados
+const product = await scraper.getProduct({
+    url: "https://pt.aliexpress.com/item/1005009120888793.html",
 })
+
+console.log("Product title:", product.title)
+console.log("Current price:", product.price.value)
 ```
 
----
+Chame `close()` ao terminar para liberar o navegador caso o fallback tenha sido acionado.
 
-## 📋 API Reference
+## Configuração
 
-### `AliExpressScraper`
-
-#### `constructor(options?: AliExpressScraperOptions)`
+O construtor aceita `AliExpressScraperOptions`:
 
 | Opção | Tipo | Padrão | Descrição |
 | :--- | :--- | :--- | :--- |
-| `timeout` | `number` | `30000` | Tempo limite da requisição em milissegundos. |
-| `quiet` | `boolean` | `true` | Se `false`, emite logs detalhados de diagnóstico no console. |
+| `timeout` | `number` | `30000` | Tempo limite das requisições e navegações, em milissegundos. |
+| `quiet` | `boolean` | `true` | Quando `false`, exibe logs de diagnóstico no console. |
 
-#### `searchProducts(options: AliExpressSearchProductsOptions): Promise<ScrapedProductPreview[]>`
+O caminho HTTP utiliza `pt.aliexpress.com`, cookies de região brasileira e preços em BRL. O fallback procura uma instalação local do Chrome nos caminhos usuais do Windows; sem ela, usa a resolução padrão do Puppeteer.
 
-Realiza a busca de produtos na listagem do AliExpress Brasil e retorna uma lista padronizada.
+## Referência da API
 
-| Parâmetro | Tipo | Padrão | Descrição |
+### Métodos
+
+#### `searchProducts(options): Promise<ScrapedProductPreview[]>`
+
+Pesquisa produtos e retorna uma lista resumida. Se o caminho HTTP não produzir resultados, o scraper tenta o navegador. Falhas no fallback resultam em uma lista vazia.
+
+| Opção | Tipo | Padrão | Descrição |
 | :--- | :--- | :--- | :--- |
-| `query` | `string` | **Obrigatório** | Termo de pesquisa (ex: `"teclado mecanico"`). |
-| `limit` | `number` | `20` | Quantidade máxima de itens a retornar. |
-| `page` | `number` | `1` | Número da página de resultados. |
+| `query` | `string` | Obrigatório | Termo de pesquisa. |
+| `limit` | `number` | `20` | Quantidade máxima de itens retornados. |
+| `page` | `number` | `1` | Página da pesquisa. |
+
+#### `getProduct(options): Promise<ScrapedProduct>`
+
+Extrai os dados completos disponíveis em uma página de produto.
+
+| Opção | Tipo | Descrição |
+| :--- | :--- | :--- |
+| `url` | `string` | URL da página do produto no AliExpress. |
 
 #### `close(): Promise<void>`
 
-Encerra instâncias do navegador subjacente se tiverem sido abertas pelo fallback.
+Fecha a instância do navegador, quando aberta, e limpa a referência interna.
 
----
+### Estrutura do retorno
 
-## 🗃️ Estrutura do Objeto Retornado (`ScrapedProductPreview`)
+`getProduct` retorna o contrato `ScrapedProduct`. Exemplo da estrutura produzida:
 
 ```typescript
-{
+const product = {
     marketplace: "aliexpress",
     externalId: "1005009120888793",
-    title: "SmaILWOLF L80 Bluetooth sem fio com microfone para jogos",
-    url: "https://pt.aliexpress.com/item/1005009120888793.html",
-    thumbnail: "https://ae-pic-a1.aliexpress-media.com/kf/S4e9ae2cb.jpg",
+    title: "Wireless Gaming Headset",
+    description: "Wireless headset with microphone",
+    brand: "Example Store",
     price: {
         value: 113.99,
         originalValue: 229.98,
-        currency: "BRL"
+        currency: "BRL",
+        pixPrice: null,
+        installment: null,
+    },
+    shipping: {
+        price: 0,
+        currency: "BRL",
+        freeShipping: true,
+        full: null,
+        prime: null,
+        estimatedTime: null,
     },
     rating: {
         average: 4.9,
-        totalReviews: 850
+        totalReviews: 850,
     },
-    brand: "Little Goldfish Digital Store",
-    scrapedAt: "2026-10-17T21:34:16.832Z"
+    availability: {
+        inStock: true,
+        quantity: null,
+    },
+    images: ["https://ae-pic-a1.aliexpress-media.com/kf/example.jpg"],
+    thumbnails: ["https://ae-pic-a1.aliexpress-media.com/kf/example.jpg"],
+    categories: null,
+    features: null,
+    specifications: null,
+    coupons: null,
+    scrapedAt: "2026-10-17T21:34:16.832Z",
 }
 ```
 
----
+Campos sem dados na página recebem `null` ou valores vazios conforme o contrato. A busca retorna `ScrapedProductPreview[]`, com `marketplace`, `externalId`, `title`, `url`, `thumbnail`, `price`, `rating`, `brand` e `scrapedAt`.
 
-## 🧪 Scripts do Projeto
+## Desenvolvimento
 
-- `npm run build`: Compila o código TypeScript para a pasta `dist`.
-- `npm run test`: Executa os testes automatizados com o Vitest.
-- `npm run lint`: Valida e corrige as regras de código com ESLint.
-- `npm run format`: Formata o código com Prettier.
+Instale as dependências com `npm install`. Os scripts disponíveis são:
 
----
+| Comando | Finalidade |
+| :--- | :--- |
+| `npm run dev` | Executa `src/index.ts` com `tsx`. |
+| `npm run build` | Compila o TypeScript para `dist/`. |
+| `npm test` | Executa os testes com Vitest. |
+| `npm run test:watch` | Executa os testes em modo de observação. |
+| `npm run test:cov` | Executa os testes com cobertura. |
+| `npm run lint` | Executa o ESLint com correção automática. |
+| `npm run format` | Formata os arquivos de `src/` com Prettier. |
 
-## 📄 Licença
+## Licença
 
-Distribuído sob a licença **MIT**. Desenvolvido com ❤️ pelo ecossistema **Afilimax**.
+Distribuído sob a licença [MIT](./LICENSE).
 
 ---
 
